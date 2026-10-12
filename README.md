@@ -1,52 +1,131 @@
+<p align="center">
+  <img src="icon_impedance_monitor.svg" width="96" alt="impedance-monitor icon">
+</p>
+
 # impedance-monitor
 
-Standalone ANT Neuro electrode impedance monitor. Displays per-electrode impedance
-in real time using a Qt GUI with a colour-coded head topomap.
+Standalone electrode impedance monitor for ANT Neuro eego amplifiers. It shows
+per-electrode impedance in real time on a colour-coded head topomap, so you can
+check cap preparation without opening the full eego software.
+
+- Live impedance readout from the amplifier through the eego SDK
+- Colour-coded topomap for the CA-209, CA-001 and CA-200 caps
+- Mock mode for trying out the GUI without hardware
+- A per-session log file recording how impedances changed during cap setup
+- Runs on Linux and Windows, with PySide6 (Qt 6) or PyQt5 (Qt 5)
+
+---
+
+## Contents
+
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Usage](#usage)
+- [GUI overview](#gui-overview)
+- [Cap layouts](#cap-layouts)
+- [Impedance thresholds](#impedance-thresholds)
+- [Logging](#logging)
+- [Troubleshooting](#troubleshooting)
+- [Development](#development)
+- [SDK constraints](#sdk-constraints)
+
+---
 
 ## Requirements
 
-- Linux or Windows 10/11
-- Python 3.10+
-- ANT Neuro eego SDK shared library — `libeego-SDK.so` (Linux) or `eego-SDK.dll` (Windows), obtained from ANT Neuro; not managed by pip
-- **Linux only:** udev rule `90-eego.rules` for unprivileged USB access
-- **Windows only:** ANT Neuro USB driver installed separately
+### System
 
-The pip dependencies are PySide6 and qtpy, installed automatically. The GUI goes through
-qtpy, so it also runs on PyQt5 if that is installed (qtpy prefers PyQt5 when both are
-present; set `QT_API=pyside6` to override).
+| Requirement | Notes |
+|---|---|
+| OS | Linux or Windows 10/11 |
+| Python | 3.10 or newer (3.12 recommended) |
+| ANT Neuro eego SDK | `libeego-SDK.so` (Linux) or `eego-SDK.dll` (Windows). Obtained from ANT Neuro; not installable via pip or conda. Needed for live mode only. |
+| USB access (Linux) | udev rule `90-eego.rules` (included in this repo) so you can use the amplifier without root |
+| USB driver (Windows) | ANT Neuro USB driver, installed separately |
+
+### Python packages
+
+| Package | Version | Purpose |
+|---|---|---|
+| [PySide6](https://pypi.org/project/PySide6/) | ≥ 6.7 | Qt GUI library (default) |
+| [qtpy](https://pypi.org/project/QtPy/) | ≥ 2.0 | Lets the same code run on PySide6 or PyQt5 |
+
+Both are installed automatically by `pip install -e .`. The SDK is loaded with the
+standard-library `ctypes`, so it doesn't need a Python wrapper package.
+
+**Optional:**
+
+| Package | Purpose |
+|---|---|
+| [PyQt5](https://pypi.org/project/PyQt5/) | Use instead of PySide6, e.g. in an existing MNE environment that already ships Qt 5 |
+| [pytest](https://pypi.org/project/pytest/) | Running the test suite |
+
+When PyQt5 and PySide6 are both installed, qtpy uses PyQt5. Set `QT_API=pyside6` to
+use PySide6 instead.
+
+---
 
 ## Installation
+
+### Option 1 — installer script (recommended)
 
 Activate a Python 3.10+ environment, then run the installer from the repo root:
 
 ```bash
-conda activate <your-env>   # or: source .venv/bin/activate, etc.
+conda activate <your-env>   # or: source .venv/bin/activate
 cd /path/to/impedance-monitor
 python install.py
 ```
 
-`install.py` detects the platform and installs into whatever Python is currently active.
-It will:
+`install.py` detects your platform and installs into whatever Python is active. It
+will:
 
-1. Verify Python 3.10+ is active (fails with instructions if not)
-2. Locate the SDK library (fails with instructions if not found)
-3. **Linux only:** install the udev rule for unprivileged USB access (requires `sudo`)
-4. Run `pip install -e .` — installs PySide6 and qtpy and registers the `impedance-monitor` command
-5. Verify the full setup with `impedance-monitor --check`
+1. Check that Python 3.10+ is active
+2. Locate the SDK library
+3. **Linux only:** install the udev rule for USB access (asks for `sudo`)
+4. Run `pip install -e .`, which installs the Python packages and registers the `impedance-monitor` command
+5. Check the setup with `impedance-monitor --check`
 
-**Don't have a Python 3.10+ environment?** Create one:
+If any step fails, the installer stops and prints instructions. Re-running
+`python install.py` is safe; use it to upgrade.
+
+### Option 2 — conda environment file
 
 ```bash
-conda create -n <your-env> python=3.12
-conda activate <your-env>
-python install.py
+conda env create -f environment.yml
+conda activate impedance-monitor
+pip install -e .
 ```
 
-**Don't have conda?** Install
-[Miniconda](https://docs.conda.io/en/latest/miniconda.html) first, then follow
-the steps above.
+You will still need to install the udev rule yourself (see
+[Manual setup](#manual-setup)).
 
-**SDK not in a standard location?** Set `EEGO_SDK_PATH` before running the installer:
+### Option 3 — into an existing environment
+
+```bash
+conda activate <your-env>
+pip install -e .
+impedance-monitor --check
+```
+
+**Using an MNE (or other Qt 5) environment?** Install `qtpy` and run it there
+directly; qtpy will pick up the environment's PyQt5. See
+[Troubleshooting](#qt-platform-plugin-xcb-could-not-be-loaded) if the window fails
+to open.
+
+### Locating the SDK
+
+The SDK library is searched for in this order:
+
+1. `--sdk-path` command-line argument
+2. `EEGO_SDK_PATH` environment variable
+3. `~/.config/impedance-monitor/sdk_path` (written by `install.py`)
+4. Default locations:
+   - Linux: `~/opt/lsl-eego/libeego-SDK.so`, `/opt/lsl-eego/libeego-SDK.so`
+   - Windows: `~/opt/lsl-eego/eego-SDK.dll`
+5. The library name on its own, found via `LD_LIBRARY_PATH` (Linux) or `PATH` (Windows)
+
+If your SDK is somewhere else, set `EEGO_SDK_PATH` before running the installer:
 
 ```bash
 # Linux
@@ -56,33 +135,74 @@ export EEGO_SDK_PATH=/path/to/libeego-SDK.so
 set EEGO_SDK_PATH=C:\path\to\eego-SDK.dll
 ```
 
-**Upgrading?** Re-running `python install.py` is safe — it will reinstall the package
-and re-verify the setup.
+If the SDK can't be found, live mode fails with an error; it never falls back to
+mock mode on its own.
+
+### Manual setup
+
+**udev rule (Linux):**
+
+```bash
+sudo cp 90-eego.rules /etc/udev/rules.d/
+sudo udevadm control --reload-rules && sudo udevadm trigger --subsystem-match=usb
+```
+
+Unplug and reconnect the amplifier afterwards.
+
+**Desktop launcher (Linux):** create `~/Desktop/impedance-monitor.desktop`:
+
+```ini
+[Desktop Entry]
+Name=Impedance Monitor
+Comment=Check ANT Neuro electrode impedances
+Exec=/path/to/conda/envs/<your-env>/bin/impedance-monitor
+Icon=/path/to/impedance-monitor/icon_impedance_monitor.svg
+Terminal=false
+Type=Application
+Categories=Science;Utility;
+```
+
+Then right-click the launcher and choose **Allow Launching**.
+
+---
 
 ## Usage
 
 ```bash
-# Launch the GUI (hardware required for live mode)
+# Live mode (amplifier connected)
 impedance-monitor --mode live --cap ca209
 
-# Mock mode — no hardware required, for UI testing
+# Mock mode, no hardware needed
 impedance-monitor --mode mock --cap ca209
 
-# Pre-populate subject and data directory (editable in the GUI before starting)
+# Pre-fill subject and data directory (both still editable in the GUI)
 impedance-monitor --mode live --cap ca209 --subject PILOT007 --data-dir /data/eeg
 
-# Custom SDK location (Linux)
-impedance-monitor --mode live --sdk-path /opt/antneuro/libeego-SDK.so
+# Custom SDK location
+impedance-monitor --mode live --sdk-path /opt/antneuro/libeego-SDK.so   # Linux
+impedance-monitor --mode live --sdk-path C:\ANT\eego-SDK.dll            # Windows
 
-# Custom SDK location (Windows)
-impedance-monitor --mode live --sdk-path C:\ANT\eego-SDK.dll
-
-# Verify setup (no hardware connection opened)
+# Check the setup without connecting to the amplifier
 impedance-monitor --check
 ```
 
-Once the window opens, configure the log directory and subject ID if needed, then
-click **▶ Start** to connect to the amplifier and begin acquisition.
+### Command-line options
+
+| Option | Default | Description |
+|---|---|---|
+| `--mode {live,mock}` | `live` | Acquisition mode |
+| `--cap {ca209,ca001,ca200}` | `ca209` | Cap layout |
+| `--poll-ms INT` | `500` | Polling interval in milliseconds |
+| `--subject SUBJECT_ID` | — | Subject ID used in the log directory. Must be given together with `--data-dir`. |
+| `--data-dir PATH` | — | Root data directory. Must be given together with `--subject`. |
+| `--sdk-path PATH` | — | Explicit path to the SDK library |
+| `--check` | — | Check the setup and exit; doesn't connect to the amplifier |
+
+Command-line options only fill in the GUI fields at startup. Once the window opens,
+adjust anything you need, then click **▶ Start** to connect to the amplifier and
+begin acquisition.
+
+---
 
 ## GUI overview
 
@@ -102,55 +222,67 @@ click **▶ Start** to connect to the amplifier and begin acquisition.
 └──────────────────────────────────────────────────────────────────┘
 ```
 
-**Electrode circles** show the channel label centred inside and a value just below
-the circle. Channels with a measurable impedance (Good/Marginal/Bad) show the kΩ
-value (e.g. `4.5K`, `30K`). Dry channels show `>1MΩ`. Short and Open channels show
-their status label (`Short` / `Open`). REF and GND are drawn outside the head outline
-at fixed positions.
+**Electrode circles** have the channel label inside and a value just below. Good,
+Marginal and Bad channels show their impedance in kΩ (e.g. `4.5K`, `30K`). Dry
+channels show `>1MΩ`. Short and Open channels show `Short` or `Open`. REF and GND are
+drawn outside the head outline at fixed positions.
 
-**Updated timestamp** in the status bar refreshes on every successful poll, so you
-can immediately see if the display is stale.
+Hover over an electrode to see a tooltip with its exact impedance and status.
+
+**Updated timestamp:** the status bar time refreshes on every successful poll, so you
+can tell at a glance if the display has stopped updating.
+
+---
 
 ## Cap layouts
 
-| Name    | Electrodes       | Description        |
-|---------|------------------|--------------------|
-| `ca209` | 32 EEG + GND + REF | Default cap      |
-| `ca001` | 32 EEG + GND + REF | Alternate 32-ch  |
+| Name | Electrodes | Description |
+|---|---|---|
+| `ca209` | 32 EEG + GND + REF | Default cap |
+| `ca001` | 32 EEG + GND + REF | Alternate 32-channel cap |
 | `ca200` | 64 EEG + GND + REF | High-density cap |
+
+---
 
 ## Impedance thresholds
 
-| Status   | Range               | Colour            |
-|----------|---------------------|-------------------|
-| Good     | 100 Ω – 50 kΩ       | Green             |
-| Marginal | 50 – 200 kΩ         | Orange (gradient) |
-| Bad      | 200 kΩ – 1 MΩ       | Red               |
-| Short    | < 100 Ω             | White             |
-| Open     | SDK no-contact sentinel | Light blue    |
-| Dry      | ≥ 1 MΩ, needs gel   | Light blue        |
+| Status | Range | Colour |
+|---|---|---|
+| Good | 100 Ω – 50 kΩ | Green |
+| Marginal | 50 – 200 kΩ | Orange (gradient) |
+| Bad | 200 kΩ – 1 MΩ | Red |
+| Short | < 100 Ω | White |
+| Open | SDK no-contact value | Light blue |
+| Dry | ≥ 1 MΩ, needs gel | Light blue |
 
-**Short** (< 100 Ω): near-zero values are physically implausible for real scalp
-contact and indicate a shorted electrode (SDK issue 3165). Shown in white.
+- **Short** (< 100 Ω): values this low aren't physically plausible for real scalp
+  contact, so they indicate a shorted electrode (SDK issue 3165).
+- **Open** (SDK value 0xFFFFFFFF): the amplifier reports no contact. The cap isn't
+  seated or the electrode is lifted.
+- **Dry** (≥ 1 MΩ but not the no-contact value): the cap is seated but the electrode
+  hasn't been gelled yet.
 
-**Open** (SDK sentinel 0xFFFFFFFF): the amplifier reports no contact — cap not
-seated or electrode lifted. Shown in light blue.
-
-**Dry** (≥ 1 MΩ, not sentinel): cap is seated but the electrode has not yet been
-gelled. Shown in light blue with `>1MΩ` label.
+---
 
 ## Logging
 
-One `.log` file is created per session in the configured log directory:
+Each session writes one `.log` file:
 
 ```
 {log_dir}/impedance_monitor_{timestamp}.log
 ```
 
-The log file mirrors everything printed to the terminal — timestamps, level tags,
-and message text. Impedance readings are logged at most once per second regardless
-of the polling rate, so the file gives a readable time-stamped record of how
-electrode impedances evolved during cap setup. Example log lines:
+The default log directory is chosen in this order:
+
+1. A Harmony `config.py` on `sys.path`: `{DATA_DIR}/sub-{TRAINING_SUBJECT}/impedance_logs/`
+2. `--data-dir` and `--subject`: `{data_dir}/sub-{subject}/impedance_logs/`
+3. Otherwise: `~/impedance_logs/`
+
+You can change the log directory in the GUI before clicking Start.
+
+The log file contains everything printed to the terminal. Impedance readings are
+logged at most once per second, however fast the polling rate, so the file is a
+readable record of how impedances changed during cap setup:
 
 ```
 2026-04-06 10:23:45,123 [INFO] Session started. Log: /home/.../impedance_logs/...
@@ -159,12 +291,86 @@ electrode impedances evolved during cap setup. Example log lines:
 2026-04-06 10:24:46,003 [INFO] Readings: FP1=3.8K FPz=2.9K ... GND=open REF=1.9K  [30G 0M 0B 2O 0D]
 ```
 
-The `[28G 2M 0B 2O 0D]` suffix is a count of Good / Marginal / Bad / Open / Dry channels.
+The `[28G 2M 0B 2O 0D]` suffix counts the Good / Marginal / Bad / Open / Dry channels.
+
+---
+
+## Troubleshooting
+
+### Qt platform plugin "xcb" could not be loaded
+
+```
+qt.qpa.plugin: Could not find the Qt platform plugin "xcb" in ""
+Aborted (core dumped)
+```
+
+This usually means Qt 5 and Qt 6 are both installed in one environment (common in
+MNE environments). PySide6 found Qt 5's `xcb` plugin and rejected it. To confirm:
+
+```bash
+QT_DEBUG_PLUGINS=1 impedance-monitor --mode mock 2>&1 | grep -i incompatible
+```
+
+Fixes, in either order:
+
+- Make sure `qtpy` is installed (`pip install qtpy`) so the app uses the
+  environment's PyQt5, or
+- Install the monitor in its own environment (Option 1 or 2 above), where only
+  PySide6 is present.
+
+### SDK library not found
+
+Run `impedance-monitor --check` to see which paths were searched. Then point to the
+library with `--sdk-path` or `EEGO_SDK_PATH`, or re-run `python install.py`.
+
+### Amplifier not detected / stream fails to open
+
+- Close eegoSports or any other program using the amplifier. The SDK allows only
+  one stream at a time.
+- **Linux:** check the udev rule is installed (`impedance-monitor --check`), then
+  reconnect the amplifier.
+
+---
+
+## Development
+
+### Project layout
+
+```
+impedance_monitor/
+├── main.py                  # CLI entry point and --check
+├── acquisition/
+│   ├── base.py              # Backend interface
+│   ├── eego_sdk.py          # ctypes wrapper around the eego SDK (only module that loads it)
+│   └── mock.py              # Simulated backend for mock mode
+├── cap_layouts/             # Electrode positions per cap
+├── gui/
+│   ├── main_window.py       # Main window, controls, polling timer
+│   └── head_widget.py       # Topomap drawing
+├── logging_session/
+│   └── session_log.py       # Per-session log file
+└── processing/
+    └── thresholds.py        # Impedance → status classification
+tests/                       # pytest suite
+```
+
+### Running tests
+
+```bash
+pip install pytest
+python -m pytest
+```
+
+Tests that need the SDK headers or the SDK library are skipped automatically if they
+aren't present.
+
+---
 
 ## SDK constraints
 
 - Only one eego stream can be active at a time. Close eegoSports before running
   live mode.
-- The first `getData()` result is discarded after stream open (SDK issue 3162).
-- The tool calls `eemagine_sdk_exit()` on shutdown. Use the Quit button or close
-  the window — do not kill the process.
+- The first `getData()` result after opening a stream is discarded, because it
+  contains wrong values (SDK issue 3162).
+- On shutdown, the tool calls `eemagine_sdk_exit()`. Quit with the Quit button or by
+  closing the window, not by killing the process.
