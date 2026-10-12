@@ -15,9 +15,9 @@ value; non-impedance statuses (Short, Open) show their status label; Dry shows
 
 import math
 
-from PySide6.QtCore import QPoint, QRect, Qt
-from PySide6.QtGui import QColor, QFont, QLinearGradient, QPainter, QPen, QPolygon
-from PySide6.QtWidgets import QToolTip, QWidget
+from qtpy.QtCore import QPoint, QRect, Qt
+from qtpy.QtGui import QColor, QFont, QLinearGradient, QPainter, QPen, QPolygon
+from qtpy.QtWidgets import QToolTip, QWidget
 
 from ..processing.thresholds import (
     GOOD_THRESHOLD_OHM,

@@ -1,7 +1,7 @@
 # impedance-monitor
 
 Standalone ANT Neuro electrode impedance monitor. Displays per-electrode impedance
-in real time using a PySide6 GUI with a colour-coded head topomap.
+in real time using a Qt GUI with a colour-coded head topomap.
 
 ## Requirements
 
@@ -11,7 +11,9 @@ in real time using a PySide6 GUI with a colour-coded head topomap.
 - **Linux only:** udev rule `90-eego.rules` for unprivileged USB access
 - **Windows only:** ANT Neuro USB driver installed separately
 
-PySide6 is the only pip dependency and is installed automatically.
+The pip dependencies are PySide6 and qtpy, installed automatically. The GUI goes through
+qtpy, so it also runs on PyQt5 if that is installed (qtpy prefers PyQt5 when both are
+present; set `QT_API=pyside6` to override).
 
 ## Installation
 
@@ -29,7 +31,7 @@ It will:
 1. Verify Python 3.10+ is active (fails with instructions if not)
 2. Locate the SDK library (fails with instructions if not found)
 3. **Linux only:** install the udev rule for unprivileged USB access (requires `sudo`)
-4. Run `pip install -e .` — installs PySide6 and registers the `impedance-monitor` command
+4. Run `pip install -e .` — installs PySide6 and qtpy and registers the `impedance-monitor` command
 5. Verify the full setup with `impedance-monitor --check`
 
 **Don't have a Python 3.10+ environment?** Create one:

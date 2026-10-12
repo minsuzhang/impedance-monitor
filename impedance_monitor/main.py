@@ -123,12 +123,12 @@ def _run_check(sdk_path_arg: str | None) -> int:
         else:
             _fail("udev rule:", f"{udev_path} not found — run install.py or copy 90-eego.rules manually")
 
-    # PySide6
+    # Qt binding — qtpy picks whichever of PyQt5 / PySide6 is installed
     try:
-        import PySide6
-        _ok("PySide6:", PySide6.__version__)
+        import qtpy
+        _ok("Qt binding:", f"{qtpy.API_NAME} (Qt {qtpy.QT_VERSION})")
     except ImportError:
-        _fail("PySide6:", "not importable — run: pip install PySide6")
+        _fail("Qt binding:", "not importable — run: pip install qtpy PySide6")
 
     if all_ok:
         print("\nAll checks passed. Run: impedance-monitor --mode live")
@@ -162,7 +162,7 @@ def main(argv=None) -> None:
 
     default_log_dir = _resolve_log_dir(args.subject, args.data_dir)
 
-    from PySide6.QtWidgets import QApplication
+    from qtpy.QtWidgets import QApplication
     from .gui.main_window import MainWindow
 
     app = QApplication(sys.argv)

@@ -2,9 +2,9 @@ import logging
 from datetime import datetime
 from pathlib import Path
 
-from PySide6.QtCore import QTimer
-from PySide6.QtGui import QCloseEvent
-from PySide6.QtWidgets import (
+from qtpy.QtCore import QTimer
+from qtpy.QtGui import QCloseEvent
+from qtpy.QtWidgets import (
     QComboBox,
     QFrame,
     QHBoxLayout,
